@@ -27,11 +27,22 @@ An offline Android speech-to-text app powered by [whisper.cpp](https://github.co
 
 Large models are not guaranteed to load on every Android device. If Large v3 fails or the phone becomes unstable, use Large v3 Turbo or Medium. Model size on disk is not the same as runtime RAM usage.
 
+## Performance profiles
+
+The app offers three decoding profiles:
+- **Fast**: greedy decoding with one candidate; lowest decoding overhead, but can miss difficult words.
+- **Balanced**: beam search size 3; recommended default for mobile use.
+- **Maximum accuracy**: beam search size 5; slower, with potentially better decoding on difficult audio.
+
+The app keeps the most recently selected Whisper model loaded in memory so repeated files do not pay the full model-initialization cost again. Switching models releases the previous model. PCM decoding uses a primitive float buffer to avoid the allocation overhead of boxing every audio sample.
+
+Flash Attention is enabled in the Whisper context. Actual gains depend on the phone, model and build backend; this is not a guarantee of GPU acceleration. The current Android build remains CPU inference.
+
 ## Accuracy and timestamps
 
 Word-level timestamps are derived from Whisper's experimental token-level aligner and merged into words. This is substantially more precise than assigning the same sentence timestamp to every word, but it is not forced alignment or a guarantee that every boundary is exact. Languages that do not separate words with spaces cannot be reliably word-segmented by this whitespace-based formatter; their transcript remains grouped at the segment level.
 
-Beam search improves decoding robustness but cannot make speech recognition infallible. Noise, overlapping speakers, names, numbers, distant microphones, strong accents and code-switching can still cause errors. For Hindi-English code-switching, use Automatic language detection and review uncertain passages manually. The app preserves the spoken language; it does not translate.
+Beam search can improve decoding robustness but cannot make speech recognition infallible. Balanced mode uses a smaller beam than the previous default to reduce latency. Noise, overlapping speakers, names, numbers, distant microphones, strong accents and code-switching can still cause errors. For Hindi-English code-switching, use Automatic language detection and review uncertain passages manually. The app preserves the spoken language; it does not translate.
 
 ## Build
 
