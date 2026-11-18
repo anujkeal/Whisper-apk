@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <thread>
 #include <cstdio>
+#include <cctype>
 #include "whisper.h"
 
 static std::string jstringToString(JNIEnv *env, jstring value) {
@@ -14,13 +15,72 @@ static std::string jstringToString(JNIEnv *env, jstring value) {
 }
 
 static std::string stamp(int64_t centiseconds) {
-    int64_t seconds = std::max<int64_t>(0, centiseconds / 100);
-    int h = static_cast<int>(seconds / 3600);
-    int m = static_cast<int>((seconds % 3600) / 60);
-    int s = static_cast<int>(seconds % 60);
-    char out[16];
-    std::snprintf(out, sizeof(out), "%02d:%02d:%02d", h, m, s);
+    centiseconds = std::max<int64_t>(0, centiseconds);
+    const int64_t totalSeconds = centiseconds / 100;
+    const int h = static_cast<int>(totalSeconds / 3600);
+    const int m = static_cast<int>((totalSeconds % 3600) / 60);
+    const int s = static_cast<int>(totalSeconds % 60);
+    const int cs = static_cast<int>(centiseconds % 100);
+    char out[24];
+    std::snprintf(out, sizeof(out), "%02d:%02d:%02d.%02d", h, m, s, cs);
     return out;
+}
+
+static void appendWord(std::string &out, const std::string &word, int64_t t0, int64_t t1) {
+    if (word.empty()) return;
+    if (t0 < 0) t0 = 0;
+    if (t1 <= t0) t1 = t0 + 1;
+    out += "[" + stamp(t0) + " --> " + stamp(t1) + "] " + word + "\n";
+}
+
+static std::string segmentAsWords(whisper_context *ctx, int segment) {
+    std::string output;
+    std::string word;
+    int64_t wordStart = -1;
+    int64_t wordEnd = -1;
+    const int tokenCount = whisper_full_n_tokens(ctx, segment);
+    bool sawWhitespace = false;
+
+    for (int j = 0; j < tokenCount; ++j) {
+        const whisper_token id = whisper_full_get_token_id(ctx, segment, j);
+        if (id >= whisper_token_eot(ctx)) continue;
+
+        const char *piece = whisper_full_get_token_text(ctx, segment, j);
+        if (!piece) continue;
+        const std::string token(piece);
+        const whisper_token_data data = whisper_full_get_token_data(ctx, segment, j);
+
+        for (unsigned char ch : token) {
+            if (std::isspace(ch)) {
+                sawWhitespace = true;
+                appendWord(output, word, wordStart, wordEnd);
+                word.clear();
+                wordStart = -1;
+                wordEnd = -1;
+                continue;
+            }
+            if (word.empty()) {
+                wordStart = data.t0;
+            }
+            word.push_back(static_cast<char>(ch));
+            wordEnd = data.t1;
+        }
+    }
+    appendWord(output, word, wordStart, wordEnd);
+
+    // Languages without whitespace (for example Chinese or Japanese) cannot be
+    // segmented into linguistic words by whitespace. Fall back to timed model tokens.
+    if (!sawWhitespace && output.empty()) {
+        for (int j = 0; j < tokenCount; ++j) {
+            const whisper_token id = whisper_full_get_token_id(ctx, segment, j);
+            if (id >= whisper_token_eot(ctx)) continue;
+            const char *piece = whisper_full_get_token_text(ctx, segment, j);
+            if (!piece || !*piece) continue;
+            const whisper_token_data data = whisper_full_get_token_data(ctx, segment, j);
+            appendWord(output, piece, data.t0, data.t1);
+        }
+    }
+    return output;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -38,35 +98,54 @@ Java_com_keal_whisper_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handl
     auto *ctx = reinterpret_cast<whisper_context *>(handle);
     if (!ctx || !audio) return env->NewStringUTF("Whisper model or audio is unavailable.");
 
-    jsize count = env->GetArrayLength(audio);
+    const jsize count = env->GetArrayLength(audio);
     if (count <= 0) return env->NewStringUTF("The selected audio contains no decodable samples.");
-    jfloat *samples = env->GetFloatArrayElements(audio, nullptr);
-    std::string lang = jstringToString(env, language);
 
-    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-    params.n_threads = std::max(2u, std::min(4u, std::thread::hardware_concurrency()));
+    jfloat *samples = env->GetFloatArrayElements(audio, nullptr);
+    if (!samples) return env->NewStringUTF("Could not access decoded audio samples.");
+    const std::string lang = jstringToString(env, language);
+
+    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+    const unsigned int cores = std::max(1u, std::thread::hardware_concurrency());
+    params.n_threads = static_cast<int>(std::min(4u, cores));
     params.language = (lang.empty() || lang == "auto") ? "auto" : lang.c_str();
     params.translate = false;
-    params.no_context = true;
+    params.no_context = false;
     params.print_realtime = false;
     params.print_progress = false;
     params.print_timestamps = false;
     params.print_special = false;
-    params.max_len = wordMode == 1 ? 1 : 0;
+    params.suppress_nst = true;
 
-    int result = whisper_full(ctx, params, samples, count);
+    // Beam search improves recognition robustness at the cost of speed.
+    params.beam_search.beam_size = 5;
+    params.temperature = 0.0f;
+    params.temperature_inc = 0.2f;
+
+    // Whisper's native token aligner supplies per-token timing. The Kotlin layer
+    // requests word mode; this flag is not a fake max_len-based segmentation.
+    params.token_timestamps = (wordMode == 1);
+    params.thold_pt = 0.01f;
+    params.thold_ptsum = 0.01f;
+
+    const int result = whisper_full(ctx, params, samples, count);
     env->ReleaseFloatArrayElements(audio, samples, JNI_ABORT);
-    if (result != 0) return env->NewStringUTF("Transcription failed. Try a smaller model or shorter audio.");
+    if (result != 0) return env->NewStringUTF("Transcription failed. Try a smaller model or a shorter audio file.");
 
     std::string output;
-    int segments = whisper_full_n_segments(ctx);
+    const int segments = whisper_full_n_segments(ctx);
     for (int i = 0; i < segments; ++i) {
         const char *text = whisper_full_get_segment_text(ctx, i);
-        if (!text) continue;
-        std::string line(text);
-        if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
-        output += "[" + stamp(whisper_full_get_segment_t0(ctx, i)) + "] " + line + "\n";
+        if (!text || std::string(text).find_first_not_of(" \t\r\n") == std::string::npos) continue;
+
+        if (wordMode == 1) {
+            output += segmentAsWords(ctx, i);
+        } else {
+            output += "[" + stamp(whisper_full_get_segment_t0(ctx, i)) + " --> " +
+                      stamp(whisper_full_get_segment_t1(ctx, i)) + "] " + text + "\n";
+        }
     }
+
     if (output.empty()) output = "No speech was detected.";
     return env->NewStringUTF(output.c_str());
 }
