@@ -221,7 +221,7 @@ private fun saveText(context: android.content.Context, uri: Uri, content: String
 private fun toSrt(text: String): String {
     val entries = text.lineSequence().mapNotNull { line ->
         val match = Regex(
-            """^\\[(\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{2})\\s*-->\\s*(\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{2})\\]\\s*(.*)$"""
+            """^\[(\d{2}):(\d{2}):(\d{2})\.(\d{2})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})\]\s*(.*)$"""
         ).matchEntire(line.trim()) ?: return@mapNotNull null
         fun timeAt(offset: Int): Int {
             val h = match.groupValues[offset].toInt()
@@ -235,8 +235,8 @@ private fun toSrt(text: String): String {
 
     return entries.mapIndexed { index, entry ->
         val end = maxOf(entry.first + 1, entry.second)
-        "${index + 1}\\n${srtTime(entry.first)} --> ${srtTime(end)}\\n${entry.third.trim()}\\n"
-    }.joinToString("\\n")
+        "${index + 1}\n${srtTime(entry.first)} --> ${srtTime(end)}\n${entry.third.trim()}\n"
+    }.joinToString("\n")
 }
 
 private fun srtTime(centiseconds: Int): String {
