@@ -28,7 +28,7 @@ Large models are not guaranteed to load on every Android device. If Large v3 fai
 
 ## Accuracy and timestamps
 
-Word-level timestamps are derived from Whisper's experimental token-level aligner and merged into words. This is substantially more precise than assigning the same sentence timestamp to every word, but it is not forced alignment or a guarantee that every boundary is exact. Some languages do not use spaces between words; those languages fall back to model-token timing.
+Word-level timestamps are derived from Whisper's experimental token-level aligner and merged into words. This is substantially more precise than assigning the same sentence timestamp to every word, but it is not forced alignment or a guarantee that every boundary is exact. Languages that do not separate words with spaces cannot be reliably word-segmented by this whitespace-based formatter; their transcript remains grouped at the segment level.
 
 Beam search improves decoding robustness but cannot make speech recognition infallible. Noise, overlapping speakers, names, numbers, distant microphones, strong accents and code-switching can still cause errors. For Hindi-English code-switching, use Automatic language detection and review uncertain passages manually. The app preserves the spoken language; it does not translate.
 
