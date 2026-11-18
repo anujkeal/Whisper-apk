@@ -16,7 +16,8 @@ object ModelManager {
         "small-q5_1" to "6fe57ddcfdd1c6b07cdcc73aaf620810ce5fc771",
         "medium-q5_0" to "7718d4c1ec62ca96998f058114db98236937490e",
         "large-v3-turbo-q5_0" to "e050f7970618a659205450ad97eb95a18d69c9ee",
-        "large-v3-q5_0" to "e6e2ed78495d403bef4b7cff42ef4aaadcfea8de"
+        "large-v3-q5_0" to "e6e2ed78495d403bef4b7cff42ef4aaadcfea8de",
+        "large-v3" to "ad82bf6a9043ceed055076d0fd39f5f186ff8062"
     )
 
     private val minimumBytes = mapOf(
@@ -25,7 +26,8 @@ object ModelManager {
         "small-q5_1" to 160_000_000L,
         "medium-q5_0" to 450_000_000L,
         "large-v3-turbo-q5_0" to 500_000_000L,
-        "large-v3-q5_0" to 950_000_000L
+        "large-v3-q5_0" to 950_000_000L,
+        "large-v3" to 2_800_000_000L
     )
 
     private fun sha1(file: File): String {
