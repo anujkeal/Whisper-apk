@@ -9,6 +9,21 @@ import java.nio.ByteOrder
 import kotlin.math.floor
 
 object AudioDecoder {
+    // Primitive storage avoids boxing every PCM sample as Float. This substantially
+    // reduces allocation pressure for long recordings on memory-constrained phones.
+    private class FloatAccumulator(initialCapacity: Int = 16_384) {
+        private var data = FloatArray(initialCapacity)
+        var size: Int = 0
+            private set
+
+        fun add(value: Float) {
+            if (size == data.size) data = data.copyOf(data.size * 2)
+            data[size++] = value
+        }
+
+        fun toArray(): FloatArray = data.copyOf(size)
+    }
+
     fun decodeTo16kMono(context: Context, uri: Uri): FloatArray {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -30,7 +45,7 @@ object AudioDecoder {
             codec.configure(inputFormat, null, null, 0)
             codec.start()
 
-            val pcm = ArrayList<Float>()
+            val pcm = FloatAccumulator()
             var inputDone = false
             var outputDone = false
             var sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
@@ -87,7 +102,7 @@ object AudioDecoder {
                 }
             }
             require(pcm.isNotEmpty()) { "Could not decode audio samples." }
-            return resample(pcm.toFloatArray(), sampleRate, 16_000)
+            return resample(pcm.toArray(), sampleRate, 16_000)
         } finally {
             try { codec?.stop() } catch (_: Exception) {}
             codec?.release()
