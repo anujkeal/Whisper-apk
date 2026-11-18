@@ -51,9 +51,9 @@ private fun WhisperApp() {
     val scope = rememberCoroutineScope()
     var audioUri by remember { mutableStateOf<Uri?>(null) }
     var audioName by remember { mutableStateOf("No audio selected") }
-    var model by remember { mutableStateOf("tiny") }
+    var model by remember { mutableStateOf("large-v3-turbo-q5_0") }
     var language by remember { mutableStateOf("auto") }
-    var wordMode by remember { mutableStateOf(false) }
+    var wordMode by remember { mutableStateOf(true) }
     var transcript by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Choose an audio file to begin.") }
     var progress by remember { mutableIntStateOf(0) }
@@ -97,8 +97,18 @@ private fun WhisperApp() {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("2. Transcription settings", fontWeight = FontWeight.SemiBold)
-                        ChoiceMenu("Model", model, listOf("tiny", "base")) { model = it }
-                        Text(if (model == "tiny") "Tiny · smaller download, faster on phones" else "Base · larger download, generally better accuracy")
+                        ChoiceMenu("Model", model, listOf("tiny-q5_1", "base-q5_1", "small-q5_1", "medium-q5_0", "large-v3-turbo-q5_0", "large-v3-q5_0")) { model = it }
+                        Text(when (model) {
+                            "large-v3-q5_0" -> "Maximum-quality option · about 1.1 GB · requires substantial free RAM and storage"
+                            "large-v3-turbo-q5_0" -> "Best high-accuracy mobile balance · about 574 MB"
+                            "medium-q5_0" -> "High accuracy · about 514 MB"
+                            "small-q5_1" -> "Good quality for mid-range phones · about 181 MB"
+                            "base-q5_1" -> "Lightweight · about 57 MB"
+                            else -> "Smallest and fastest · about 31 MB"
+                        }, style = MaterialTheme.typography.bodySmall)
+                        if (model == "large-v3-q5_0") {
+                            Text("This model can fail to load on phones with limited available memory. Use Large v3 Turbo if it does.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
                         ChoiceMenu("Language", language, listOf("auto", "en", "hi")) { language = it }
                         Text(when (language) { "en" -> "English"; "hi" -> "Hindi"; else -> "Automatic detection" })
                         ChoiceMenu("Timestamp mode", if (wordMode) "word" else "sentence", listOf("sentence", "word")) { wordMode = it == "word" }
@@ -166,7 +176,7 @@ private fun WhisperApp() {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Processing stays on this device after the model is downloaded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("High-accuracy mode uses beam search. Word timestamps come from Whisper's experimental token aligner; review names, numbers and unclear speech manually. Processing stays on this device after the model is downloaded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -179,7 +189,9 @@ private fun ChoiceMenu(label: String, selected: String, options: List<String>, o
         Text(label, style = MaterialTheme.typography.labelLarge)
         OutlinedButton(onClick = { expanded = true }) {
             Text(when (selected) {
-                "tiny" -> "Tiny model"; "base" -> "Base model"
+                "tiny-q5_1" -> "Tiny · Q5"; "base-q5_1" -> "Base · Q5"
+                "small-q5_1" -> "Small · Q5"; "medium-q5_0" -> "Medium · Q5"
+                "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"
                 "auto" -> "Auto detect"; "en" -> "English"; "hi" -> "Hindi"
                 "word" -> "Word-level"; else -> "Sentence-level"
             })
@@ -188,7 +200,10 @@ private fun ChoiceMenu(label: String, selected: String, options: List<String>, o
             options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(when (option) {
-                        "tiny" -> "Tiny"; "base" -> "Base"; "auto" -> "Auto detect"
+                        "tiny-q5_1" -> "Tiny · Q5"; "base-q5_1" -> "Base · Q5"
+                        "small-q5_1" -> "Small · Q5"; "medium-q5_0" -> "Medium · Q5"
+                        "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"
+                        "auto" -> "Auto detect"
                         "en" -> "English"; "hi" -> "Hindi"; "word" -> "Word-level"
                         else -> "Sentence-level"
                     }) },
@@ -205,20 +220,30 @@ private fun saveText(context: android.content.Context, uri: Uri, content: String
 
 private fun toSrt(text: String): String {
     val entries = text.lineSequence().mapNotNull { line ->
-        val match = Regex("""^\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*)$""").matchEntire(line.trim())
-            ?: return@mapNotNull null
-        val start = match.groupValues[1].toInt() * 3600 + match.groupValues[2].toInt() * 60 + match.groupValues[3].toInt()
-        start to match.groupValues[4]
+        val match = Regex(
+            """^\\[(\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{2})\\s*-->\\s*(\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{2})\\]\\s*(.*)$"""
+        ).matchEntire(line.trim()) ?: return@mapNotNull null
+        fun timeAt(offset: Int): Int {
+            val h = match.groupValues[offset].toInt()
+            val m = match.groupValues[offset + 1].toInt()
+            val s = match.groupValues[offset + 2].toInt()
+            val cs = match.groupValues[offset + 3].toInt()
+            return (((h * 60 + m) * 60 + s) * 100) + cs
+        }
+        Triple(timeAt(1), timeAt(5), match.groupValues[9])
     }.toList()
+
     return entries.mapIndexed { index, entry ->
-        val end = if (index < entries.lastIndex) entries[index + 1].first else entry.first + 3
-        "${index + 1}\n${srtTime(entry.first)} --> ${srtTime(maxOf(entry.first + 1, end))}\n${entry.second.trim()}\n"
-    }.joinToString("\n")
+        val end = maxOf(entry.first + 1, entry.second)
+        "${index + 1}\\n${srtTime(entry.first)} --> ${srtTime(end)}\\n${entry.third.trim()}\\n"
+    }.joinToString("\\n")
 }
 
-private fun srtTime(seconds: Int): String {
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return String.format(Locale.US, "%02d:%02d:%02d,000", h, m, s)
+private fun srtTime(centiseconds: Int): String {
+    val milliseconds = centiseconds * 10
+    val h = milliseconds / 3_600_000
+    val m = (milliseconds % 3_600_000) / 60_000
+    val s = (milliseconds % 60_000) / 1_000
+    val ms = milliseconds % 1_000
+    return String.format(Locale.US, "%02d:%02d:%02d,%03d", h, m, s, ms)
 }
