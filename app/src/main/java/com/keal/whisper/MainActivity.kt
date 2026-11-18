@@ -97,16 +97,17 @@ private fun WhisperApp() {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("2. Transcription settings", fontWeight = FontWeight.SemiBold)
-                        ChoiceMenu("Model", model, listOf("tiny-q5_1", "base-q5_1", "small-q5_1", "medium-q5_0", "large-v3-turbo-q5_0", "large-v3-q5_0")) { model = it }
+                        ChoiceMenu("Model", model, listOf("tiny-q5_1", "base-q5_1", "small-q5_1", "medium-q5_0", "large-v3-turbo-q5_0", "large-v3-q5_0", "large-v3")) { model = it }
                         Text(when (model) {
-                            "large-v3-q5_0" -> "Maximum-quality option · about 1.1 GB · requires substantial free RAM and storage"
+                            "large-v3" -> "Absolute maximum · full Large v3 · about 2.9 GiB · extreme RAM and storage demand"
+                            "large-v3-q5_0" -> "Maximum quantized option · about 1.1 GB · requires substantial free RAM and storage"
                             "large-v3-turbo-q5_0" -> "Best high-accuracy mobile balance · about 574 MB"
                             "medium-q5_0" -> "High accuracy · about 514 MB"
                             "small-q5_1" -> "Good quality for mid-range phones · about 181 MB"
                             "base-q5_1" -> "Lightweight · about 57 MB"
                             else -> "Smallest and fastest · about 31 MB"
                         }, style = MaterialTheme.typography.bodySmall)
-                        if (model == "large-v3-q5_0") {
+                        if (model == "large-v3-q5_0" || model == "large-v3") {
                             Text("This model can fail to load on phones with limited available memory. Use Large v3 Turbo if it does.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                         ChoiceMenu("Language", language, listOf("auto", "en", "hi")) { language = it }
@@ -191,7 +192,7 @@ private fun ChoiceMenu(label: String, selected: String, options: List<String>, o
             Text(when (selected) {
                 "tiny-q5_1" -> "Tiny · Q5"; "base-q5_1" -> "Base · Q5"
                 "small-q5_1" -> "Small · Q5"; "medium-q5_0" -> "Medium · Q5"
-                "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"
+                "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"; "large-v3" -> "Large v3 · Full"
                 "auto" -> "Auto detect"; "en" -> "English"; "hi" -> "Hindi"
                 "word" -> "Word-level"; else -> "Sentence-level"
             })
