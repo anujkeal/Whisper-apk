@@ -101,7 +101,7 @@ object AudioDecoder {
                     }
                 }
             }
-            require(pcm.isNotEmpty()) { "Could not decode audio samples." }
+            require(pcm.size > 0) { "Could not decode audio samples." }
             return resample(pcm.toArray(), sampleRate, 16_000)
         } finally {
             try { codec?.stop() } catch (_: Exception) {}
