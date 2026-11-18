@@ -203,7 +203,7 @@ private fun ChoiceMenu(label: String, selected: String, options: List<String>, o
                     text = { Text(when (option) {
                         "tiny-q5_1" -> "Tiny · Q5"; "base-q5_1" -> "Base · Q5"
                         "small-q5_1" -> "Small · Q5"; "medium-q5_0" -> "Medium · Q5"
-                        "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"
+                        "large-v3-turbo-q5_0" -> "Large v3 Turbo · Q5"; "large-v3-q5_0" -> "Large v3 · Q5"; "large-v3" -> "Large v3 · Full"
                         "auto" -> "Auto detect"
                         "en" -> "English"; "hi" -> "Hindi"; "word" -> "Word-level"
                         else -> "Sentence-level"
