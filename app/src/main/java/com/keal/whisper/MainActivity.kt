@@ -54,6 +54,7 @@ private fun WhisperApp() {
     var model by remember { mutableStateOf("large-v3-turbo-q5_0") }
     var language by remember { mutableStateOf("auto") }
     var wordMode by remember { mutableStateOf(true) }
+    var performanceMode by remember { mutableIntStateOf(1) }
     var transcript by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Choose an audio file to begin.") }
     var progress by remember { mutableIntStateOf(0) }
@@ -112,6 +113,14 @@ private fun WhisperApp() {
                         }
                         ChoiceMenu("Language", language, listOf("auto", "en", "hi")) { language = it }
                         Text(when (language) { "en" -> "English"; "hi" -> "Hindi"; else -> "Automatic detection" })
+                        ChoiceMenu("Speed / accuracy", listOf("Fast", "Balanced", "Maximum accuracy")[performanceMode], listOf("Fast", "Balanced", "Maximum accuracy")) {
+                            performanceMode = listOf("Fast", "Balanced", "Maximum accuracy").indexOf(it).coerceAtLeast(0)
+                        }
+                        Text(when (performanceMode) {
+                            0 -> "Fastest decoding · may miss some difficult words"
+                            2 -> "Slower beam search · prioritises difficult speech"
+                            else -> "Recommended · balanced speed and recognition quality"
+                        }, style = MaterialTheme.typography.bodySmall)
                         ChoiceMenu("Timestamp mode", if (wordMode) "word" else "sentence", listOf("sentence", "word")) { wordMode = it == "word" }
                     }
                 }
@@ -128,16 +137,18 @@ private fun WhisperApp() {
                                 val result = withContext(Dispatchers.IO) {
                                     val modelFile = ModelManager.ensureModel(context, model) { progress = it }
                                     status = "Loading Whisper model…"
-                                    val nativeContext = WhisperNative.initModel(modelFile.absolutePath)
+                                    val nativeContext = WhisperNative.getOrLoadModel(modelFile.absolutePath)
                                     if (nativeContext == 0L) error("Could not load the Whisper model. Re-download it and try again.")
-                                    try {
-                                        status = "Decoding audio…"
-                                        val samples = AudioDecoder.decodeTo16kMono(context, selected)
-                                        status = "Transcribing audio…"
-                                        WhisperNative.transcribe(nativeContext, samples, language, if (wordMode) 1 else 0)
-                                    } finally {
-                                        WhisperNative.releaseModel(nativeContext)
-                                    }
+                                    status = "Decoding audio…"
+                                    val samples = AudioDecoder.decodeTo16kMono(context, selected)
+                                    status = "Transcribing audio…"
+                                    WhisperNative.transcribe(
+                                        nativeContext,
+                                        samples,
+                                        language,
+                                        if (wordMode) 1 else 0,
+                                        performanceMode
+                                    )
                                 }
                                 transcript = result
                                 status = "Transcription complete."
@@ -177,7 +188,7 @@ private fun WhisperApp() {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("High-accuracy mode uses beam search. Word timestamps come from Whisper's experimental token aligner; review names, numbers and unclear speech manually. Processing stays on this device after the model is downloaded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Balanced mode is recommended for everyday use. The loaded model stays in memory for repeat jobs. Word timestamps come from Whisper's experimental token aligner; review names, numbers and unclear speech manually. Processing stays on this device after the model is downloaded.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
