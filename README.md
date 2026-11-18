@@ -22,7 +22,8 @@ An offline Android speech-to-text app powered by [whisper.cpp](https://github.co
 | Small Q5 | 181 MB | Mid-range phones |
 | Medium Q5 | 514 MiB | Higher recognition quality |
 | Large v3 Turbo Q5 | 547 MiB | Recommended high-accuracy mobile option |
-| Large v3 Q5 | 1.1 GiB | Highest-quality option; very high RAM/storage demand |
+| Large v3 Q5 | 1.1 GiB | Maximum quantized option; very high RAM/storage demand |
+| Large v3 full | 2.9 GiB | Absolute maximum model option; extreme RAM/storage demand and unlikely to load on many phones |
 
 Large models are not guaranteed to load on every Android device. If Large v3 fails or the phone becomes unstable, use Large v3 Turbo or Medium. Model size on disk is not the same as runtime RAM usage.
 
@@ -48,7 +49,7 @@ APK output:
 
 ## First launch
 
-The app defaults to Large v3 Turbo Q5. Its model file is approximately 547 MiB and is downloaded on first use. Choose Large v3 Q5 only if the phone has sufficient free memory and storage. The model download is retained locally for subsequent offline transcription.
+The app defaults to Large v3 Turbo Q5. Its model file is approximately 547 MiB and is downloaded on first use. Choose Large v3 Q5 only if the phone has sufficient free memory and storage. The unquantized Large v3 model is also available for devices with exceptional memory capacity, but it may not load on most phones. The model download is retained locally for subsequent offline transcription.
 
 ## License
 
