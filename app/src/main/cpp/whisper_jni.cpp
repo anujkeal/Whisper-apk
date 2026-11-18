@@ -88,13 +88,14 @@ Java_com_keal_whisper_WhisperNative_initModel(JNIEnv *env, jobject, jstring path
     std::string modelPath = jstringToString(env, path);
     whisper_context_params params = whisper_context_default_params();
     params.use_gpu = false;
+    params.flash_attn = true;
     whisper_context *ctx = whisper_init_from_file_with_params(modelPath.c_str(), params);
     return reinterpret_cast<jlong>(ctx);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_keal_whisper_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle,
-                                                jfloatArray audio, jstring language, jint wordMode) {
+                                                jfloatArray audio, jstring language, jint wordMode, jint performanceMode) {
     auto *ctx = reinterpret_cast<whisper_context *>(handle);
     if (!ctx || !audio) return env->NewStringUTF("Whisper model or audio is unavailable.");
 
@@ -105,9 +106,14 @@ Java_com_keal_whisper_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handl
     if (!samples) return env->NewStringUTF("Could not access decoded audio samples.");
     const std::string lang = jstringToString(env, language);
 
-    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+    const auto strategy = performanceMode == 0
+        ? WHISPER_SAMPLING_GREEDY
+        : WHISPER_SAMPLING_BEAM_SEARCH;
+    whisper_full_params params = whisper_full_default_params(strategy);
     const unsigned int cores = std::max(1u, std::thread::hardware_concurrency());
-    params.n_threads = static_cast<int>(std::min(4u, cores));
+    // Dimensity-class phones benefit from a moderate thread count; using every
+    // logical core can increase thermal throttling and memory contention.
+    params.n_threads = static_cast<int>(std::min(performanceMode == 0 ? 6u : 4u, cores));
     params.language = (lang.empty() || lang == "auto") ? "auto" : lang.c_str();
     params.translate = false;
     params.no_context = false;
@@ -117,8 +123,11 @@ Java_com_keal_whisper_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handl
     params.print_special = false;
     params.suppress_nst = true;
 
-    // Beam search improves recognition robustness at the cost of speed.
-    params.beam_search.beam_size = 5;
+    // Fast: greedy decoding. Balanced: smaller beam. Accuracy: larger beam.
+    // These profiles expose the speed/accuracy trade-off rather than silently
+    // forcing the slowest decoding configuration on every recording.
+    params.greedy.best_of = 1;
+    params.beam_search.beam_size = performanceMode == 2 ? 5 : 3;
     params.temperature = 0.0f;
     params.temperature_inc = 0.2f;
 
